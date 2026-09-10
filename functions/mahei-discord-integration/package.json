@@ -1,0 +1,10 @@
+{
+  "name": "mahei-discord-integration",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/main.js",
+  "engines": {
+    "node": ">=20"
+  }
+}
