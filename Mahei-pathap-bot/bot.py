@@ -19,7 +19,10 @@ APPWRITE_API_KEY = os.getenv("APPWRITE_API_KEY")
 APPWRITE_DATABASE_ID = os.getenv("APPWRITE_DATABASE_ID")
 APPWRITE_DISCORD_LINK_REQUESTS_COLLECTION_ID = os.getenv("APPWRITE_DISCORD_LINK_REQUESTS_COLLECTION_ID")
 APPWRITE_DISCORD_USERS_COLLECTION_ID = os.getenv("APPWRITE_DISCORD_USERS_COLLECTION_ID")
-
+APPWRITE_USER_MONTHLY_STATS_TABLE_ID = os.getenv(
+    "APPWRITE_USER_MONTHLY_STATS_TABLE_ID",
+    "user_monthly_stats"
+)
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN is missing from .env")
 
@@ -126,6 +129,78 @@ def appwrite_create_row(table_id, data):
             "data": data,
         },
     )
+
+
+def get_user_monthly_stats(appwrite_user_id):
+    rows = appwrite_list_rows(
+        APPWRITE_USER_MONTHLY_STATS_TABLE_ID
+    )
+
+    user_rows = []
+
+    for row in rows:
+        if str(
+            row.get("appwrite_user_id", "")
+        ) == str(appwrite_user_id):
+            user_rows.append(row)
+
+    return user_rows
+
+
+
+def get_user_monthly_stats(appwrite_user_id):
+    rows = appwrite_list_rows(
+        APPWRITE_USER_MONTHLY_STATS_TABLE_ID
+    )
+
+    user_rows = []
+
+    for row in rows:
+        if str(
+            row.get("appwrite_user_id", "")
+        ) == str(appwrite_user_id):
+            user_rows.append(row)
+
+    return user_rows
+
+
+def calculate_user_progress(appwrite_user_id):
+    rows = get_user_monthly_stats(appwrite_user_id)
+
+    total_xp = 0
+    total_focus_minutes = 0
+    total_focus_sessions = 0
+
+    for row in rows:
+        total_xp += int(row.get("xp", 0) or 0)
+        total_focus_minutes += int(
+            row.get("focus_minutes", 0) or 0
+        )
+        total_focus_sessions += int(
+            row.get("focus_sessions", 0) or 0
+        )
+
+    return {
+        "total_xp": total_xp,
+        "total_focus_minutes": total_focus_minutes,
+        "total_focus_sessions": total_focus_sessions,
+    }
+
+
+def get_monthly_xp(appwrite_user_id, month_key):
+    rows = get_user_monthly_stats(appwrite_user_id)
+
+    for row in rows:
+        if str(row.get("month_key", "")) == str(month_key):
+            return int(row.get("xp", 0) or 0)
+
+    return 0
+
+
+def get_current_month_key():
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
 
 
 def appwrite_update_row(table_id, row_id, data):
@@ -1345,9 +1420,78 @@ async def hello(
             ephemeral=True,
         )
 
+# *******************************************
+#        /PROGRESS COMMAND
+# *******************************************
+@bot.tree.command(
+    name="progress",
+    description="View your Mahei-Pathap progress"
+)
+async def progress(interaction: discord.Interaction):
+    discord_user_id = interaction.user.id
+
+    linked_user = get_linked_mahei_user(
+        discord_user_id
+    )
+
+    if not linked_user:
+        await interaction.response.send_message(
+            "❌ Your Discord account is not linked to Mahei-Pathap. Use `/link` first.",
+            ephemeral=True
+        )
+        return
+
+    appwrite_user_id = linked_user["appwrite_user_id"]
+
+    progress_data = calculate_user_progress(
+        appwrite_user_id
+    )
+
+    current_month = get_current_month_key()
+
+    monthly_xp = get_monthly_xp(
+        appwrite_user_id,
+        current_month
+    )
+
+    embed = discord.Embed(
+        title="📊 Your Mahei-Pathap Progress",
+        description=f"Progress for {interaction.user.mention}",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="⭐ Total XP",
+        value=str(progress_data["total_xp"]),
+        inline=True
+    )
+
+    embed.add_field(
+        name="📅 This Month",
+        value=f"{monthly_xp} XP",
+        inline=True
+    )
+
+    embed.add_field(
+        name="🎯 Focus Sessions",
+        value=str(progress_data["total_focus_sessions"]),
+        inline=True
+    )
+
+    embed.add_field(
+        name="⏱️ Focus Minutes",
+        value=str(progress_data["total_focus_minutes"]),
+        inline=True
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
 
 # =========================
 # START BOT
-# =========================
+# =========================S
 
 bot.run(TOKEN)
