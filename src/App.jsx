@@ -972,61 +972,70 @@ const [discordLinkChecking, setDiscordLinkChecking] = useState(false);
   const [trustedFocusSessionId, setTrustedFocusSessionId] = useState(null);
   const [focusActionBusy, setFocusActionBusy] = useState(false);
   const [focusStatus, setFocusStatus] = useState("");
-
+  
   useEffect(() => {
-    if (!timerRunning) return;
+  if (!timerRunning) return;
 
-    const interval = setInterval(() => {
-      setTimerSeconds((seconds) => Math.max(0, seconds - 1));
-    }, 1000);
+  const interval = setInterval(() => {
+    setTimerSeconds((seconds) => Math.max(0, seconds - 1));
+  }, 1000);
 
-    return () => clearInterval(interval);
-  }, [timerRunning]);
+  return () => clearInterval(interval);
+}, [timerRunning]);
 
-  useEffect(() => {
-    if (!timerRunning || timerSeconds !== 0) return;
+ useEffect(() => {
+  if (!timerRunning || timerSeconds !== 0) return;
 
-    setTimerRunning(false);
-    if (timerMode !== "work") return;
+  setTimerRunning(false);
+  if (timerMode !== "work") return;
 
-    let cancelled = false;
-    (async () => {
-      setFocusActionBusy(true);
-      setFocusStatus("Verifying your focus session…");
-      try {
-        if (APPWRITE_DISCORD_INTEGRATION_FUNCTION_ID && authUser) {
-          const result = await executeTrustedFocus("complete_focus", {
-            sessionId: trustedFocusSessionId,
-          });
-          if (!cancelled) {
-            setTrustedFocusSessionId(null);
-            setFocusStatus(`Focus completed — +${result.xpAwarded || 10} XP earned.`);
-            await saveFocusSession({
-              date: getLocalDateString(),
-              duration: 25,
-              task: focusTask.trim() || "General Study",
-            });
-          }
-        } else if (authUser) {
-          await saveFocusSession({
-            date: getLocalDateString(),
-            duration: 25,
-            task: focusTask.trim() || "General Study",
-          });
-          if (!cancelled) setFocusStatus("Focus completed and saved.");
-        }
-      } catch (error) {
-        console.error("Failed to verify focus session:", error);
-        if (!cancelled) {
-          setTrustedFocusSessionId(null);
-          setFocusStatus(error.message || "Focus verification failed.");
-        }
-      } finally {
-        if (!cancelled) setFocusActionBusy(false);
+  (async () => {
+    setFocusActionBusy(true);
+    setFocusStatus("Verifying your focus session…");
+
+    try {
+      if (APPWRITE_DISCORD_INTEGRATION_FUNCTION_ID && authUser) {
+        const result = await executeTrustedFocus("complete_focus", {
+          sessionId: trustedFocusSessionId,
+        });
+
+        setTrustedFocusSessionId(null);
+        setFocusStatus(
+          `Focus completed — +${result.xpAwarded || 10} XP earned.`
+        );
+
+        await saveFocusSession({
+          date: getLocalDateString(),
+          duration: 25,
+          task: focusTask.trim() || "General Study",
+        });
+      } else if (authUser) {
+        await saveFocusSession({
+          date: getLocalDateString(),
+          duration: 25,
+          task: focusTask.trim() || "General Study",
+        });
+
+        setFocusStatus("Focus completed and saved.");
       }
-    })();
-    return () => { cancelled = true; };
-  }, [timerSeconds, timerRunning, timerMode, focusTask, trustedFocusSessionId, authUser]);
+    } catch (error) {
+      console.error("Failed to verify focus session:", error);
+      setTrustedFocusSessionId(null);
+      setFocusStatus(
+        error.message || "Focus verification failed."
+      );
+    } finally {
+      setFocusActionBusy(false);
+    }
+  })();
+}, [
+  timerSeconds,
+  timerRunning,
+  timerMode,
+  focusTask,
+  trustedFocusSessionId,
+  authUser,
+]);
 
   async function handleFocusStartPause() {
     if (focusActionBusy) return;
