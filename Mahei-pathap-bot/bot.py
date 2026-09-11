@@ -77,7 +77,43 @@ def get_linked_mahei_user(discord_user_id):
     return None
 
 
+def get_linked_mahei_user(discord_user_id):
+    result = appwrite_request(
+        f"{tablesdb_table_base(APPWRITE_DISCORD_USERS_COLLECTION_ID)}/rows",
+        params={
+            "limit": 100,
+        },
+    )
 
+    rows = result.get("rows") or []
+
+    for row in rows:
+        if str(
+            row.get("discord_user_id", "")
+        ) == str(discord_user_id):
+            return row
+
+    return None
+
+
+def get_discord_user_by_appwrite_id(appwrite_user_id):
+    rows = appwrite_list_rows(
+        APPWRITE_DISCORD_USERS_COLLECTION_ID
+    )
+
+    for row in rows:
+        if str(
+            row.get("appwrite_user_id", "")
+        ) == str(appwrite_user_id):
+            return row.get("discord_username")
+
+    return None
+
+
+def hash_link_code(code):
+    return hashlib.sha256(
+        code.strip().upper().encode()
+    ).hexdigest()
 
 def hash_link_code(code):
     return hashlib.sha256(
@@ -1420,6 +1456,35 @@ async def hello(
             ephemeral=True,
         )
 
+
+def calculate_monthly_leaderboard(month_key):
+    rows = appwrite_list_rows(
+        APPWRITE_USER_MONTHLY_STATS_TABLE_ID
+    )
+
+    leaderboard = []
+
+    for row in rows:
+        if row.get("month_key") != month_key:
+            continue
+
+        appwrite_user_id = row.get("appwrite_user_id")
+        xp = int(row.get("xp", 0) or 0)
+
+        if not appwrite_user_id:
+            continue
+
+        leaderboard.append({
+            "appwrite_user_id": appwrite_user_id,
+            "xp": xp
+        })
+
+    leaderboard.sort(
+        key=lambda item: item["xp"],
+        reverse=True
+    )
+
+    return leaderboard
 # *******************************************
 #        /PROGRESS COMMAND
 # *******************************************
@@ -1489,6 +1554,79 @@ async def progress(interaction: discord.Interaction):
     )
 
 
+# *******************************************
+#        /LEADERBOARD COMMAND
+# *******************************************
+@bot.tree.command(
+    name="leaderboard",
+    description="View the Mahei-Pathap XP leaderboard"
+)
+
+async def leaderboard(interaction: discord.Interaction):
+
+    await interaction.response.defer()
+
+    current_month = get_current_month_key()
+
+    leaderboard_data = calculate_monthly_leaderboard(
+        current_month
+    )
+
+    embed = discord.Embed(
+        title="🏆 Mahei-Pathap Leaderboard",
+        description=f"Monthly XP — {current_month}",
+        color=discord.Color.gold()
+    )
+
+    if not leaderboard_data:
+        embed.description = (
+            f"No XP recorded yet for {current_month}."
+        )
+
+        await interaction.followup.send(
+            embed=embed
+        )
+        return
+
+    top_users = leaderboard_data[:10]
+
+    for position, user_data in enumerate(
+        top_users,
+        start=1
+    ):
+        appwrite_user_id = user_data[
+            "appwrite_user_id"
+        ]
+
+        xp = user_data["xp"]
+
+        discord_user = get_discord_user_by_appwrite_id(
+            appwrite_user_id
+        )
+
+        if discord_user:
+            name = discord_user
+        else:
+            name = f"User {appwrite_user_id[:8]}"
+
+        if position == 1:
+            medal = "🥇"
+        elif position == 2:
+            medal = "🥈"
+        elif position == 3:
+            medal = "🥉"
+        else:
+            medal = f"**{position}.**"
+
+        embed.add_field(
+            name=f"{medal} {name}",
+            value=f"⭐ {xp} XP",
+            inline=False
+        )
+
+    await interaction.followup.send(
+        embed=embed
+    )
 
 # =========================
 # START BOT
